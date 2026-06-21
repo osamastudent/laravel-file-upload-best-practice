@@ -1,0 +1,112 @@
+
+    public function service_add(Request $request)
+    {
+         $request->validate([
+        'name'        => 'required|max:255',
+        'image_icon'     => 'required|image|mimes:jpeg,png,jpg|max:2048',
+        'gif_icon'     => 'required|mimes:gif|max:5120',
+       'heading'        => 'required|max:255',
+        'text'        => 'required|max:255',
+        'main_image'     => 'required|image|mimes:jpeg,png,jpg|max:2048',
+    ]);
+    
+     $data = $request->all();
+        $data['slug'] = $this->generateUniqueSlug($request->solution_title);
+        
+        // File Uploads
+        $data['image_icon']      = $this->uploadFile($request, 'image_icon', 'uploads');
+        $data['gif_icon']      = $this->uploadFile($request, 'gif_icon', 'uploads');
+        $data['main_image']      = $this->uploadFile($request, 'main_image', 'uploads');
+       
+        Service::create($data);
+        
+        // DB::table('services')->insert([
+        //     'name' => $request->name
+        // ]);
+
+        return redirect()->back()->with('success', 'Record has been Added');
+    }
+
+   public function service_edit(Request $request)
+{
+    
+    // dd($request->all());
+    // 1. Validation (files 'nullable' hain kyunki update mein file zaroori nahi)
+     $request->validate([
+        'name'        => 'required|max:255',
+        'image_icon'     => 'nullable|image|mimes:jpeg,png,jpg,svg|max:2048',
+        'gif_icon'     => 'nullable|mimes:gif|max:5120',
+          'heading'        => 'required|max:255',
+        'text'        => 'required|max:255',
+        'main_image'     => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
+       
+    ]);
+
+    $service = Service::findOrFail($request->id);
+    $data = $request->except(['image_icon', 'gif_icon','main_image']);
+
+    if ($request->name !== $service->name) {
+        $data['slug'] = $this->generateUniqueSlug($request->name);
+    }
+
+    $fileFields = ['image_icon', 'gif_icon','main_image'];
+
+    foreach ($fileFields as $field) {
+        if ($request->hasFile($field)) {
+            // Purani file delete karein
+            if (!empty($service->$field) && file_exists(public_path($service->$field))) {
+                File::delete(public_path($service->$field));
+            }
+            // Nayi file upload karein
+            $data[$field] = $this->uploadFile($request, $field, 'uploads');
+        } else {
+            // Agar file nahi di, to purani path hi rahegi
+            $data[$field] = $service->$field;
+        }
+    }
+
+    // 5. Update Record
+    $service->update($data);
+
+    return redirect()->back()->with('success', 'Record has been Updated');
+}
+
+    public function services_delete($id)
+    {
+        
+        $service = Service::findOrFail($id);
+          $files = [
+            'image_icon','gif_icon','main_image'
+        ];
+
+        foreach ($files as $fileField) {
+            if ($service->$fileField) { File::delete(public_path($service->$fileField)); }
+        }
+
+        $service->delete();
+        
+        
+        return redirect()->back()->with('success', 'Record has been Deleted');
+    }
+
+ // Helper: Upload File
+    private function uploadFile($request, $fieldName, $path) {
+        if ($request->hasFile($fieldName)) {
+            $file = $request->file($fieldName);
+            $name = time().'_'.uniqid().'.'.$file->getClientOriginalExtension();
+            $file->move(public_path($path), $name);
+            return $path.'/'.$name;
+        }
+        return null;
+    }
+
+    // Helper: Unique Slug
+    private function generateUniqueSlug($title) {
+        $slug = Str::slug($title);
+        $count = 1;
+        $originalSlug = $slug;
+        while (Service::where('slug', $slug)->exists()) {
+            $slug = $originalSlug . '-' . $count++;
+        }
+        return $slug;
+    }
